@@ -1,4 +1,4 @@
-*This project has been created as part of the 42 curriculum by <login1>, <login2>, <login3>.*
+*This project has been created as part of the 42 curriculum by radahman, mmutsulk, mobullad.*
 
 # ft_irc
 
@@ -232,16 +232,6 @@ PRIVMSG #general :Hello from nc!
 │   └── Channel.cpp
 ├── bot/
 │   └── main.cpp
-├── TESTER/
-│   ├── big_test.txt
-│   ├── bonus_tester.py
-│   ├── ircbot
-│   ├── received_big_test.txt
-│   ├── received_test.txt
-│   ├── received_tester.py
-│   ├── send.file.py
-│   ├── test.txt
-│   └── tester.py
 └── .gitignore
 ```
 
