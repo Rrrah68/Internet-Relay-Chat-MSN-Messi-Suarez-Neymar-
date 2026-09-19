@@ -3,6 +3,7 @@
 
 # include <string>
 # include <vector>
+# include <set>
 
 class Channel
 {
@@ -23,6 +24,8 @@ class Channel
 		void					setInviteOnly(bool value);
 		void					setKey(const std::string &key);
 		void					removeKey();
+		void					addHalfOperator(int fd);
+
 
 		bool					isOperator(int fd) const;
 		bool					isInvited(int fd) const;
@@ -30,6 +33,8 @@ class Channel
 		bool					getTopicRestricted() const;
 		bool					getInviteOnly() const;
 		bool					getKeyEnabled() const;
+		bool					hasOperator() const;
+		bool 					isHalfOperator(int fd) const;
 
 		bool 					getLimitEnabled() const;
 		int 					getLimit() const;
@@ -47,6 +52,7 @@ class Channel
 		std::string			_topic;
 		bool				_topicRestricted;
 		std::vector<int>	_operators;
+		std::set<int> 		_halfOperators;
 		bool				_inviteOnly;
 		std::vector<int>	_invited;
 		bool				_keyEnabled;

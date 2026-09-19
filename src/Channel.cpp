@@ -1,12 +1,12 @@
 #include "Channel.hpp"
 #include <algorithm>
 
-Channel::Channel() : _topicRestricted(false), _inviteOnly(false), _keyEnabled(false), _limitEnabled(false), _limit(0)
+Channel::Channel() : _topicRestricted(true), _inviteOnly(false), _keyEnabled(false), _limitEnabled(false), _limit(0)
 {
 }
 
 Channel::Channel(const std::string &name)
-	: _name(name), _topicRestricted(false), _inviteOnly(false), _keyEnabled(false), _limitEnabled(false), _limit(0)
+	: _name(name), _topicRestricted(true), _inviteOnly(false), _keyEnabled(false), _limitEnabled(false), _limit(0)
 {
 }
 
@@ -171,4 +171,19 @@ void Channel::removeLimit()
 {
 	_limit = 0;
 	_limitEnabled = false;
+}
+
+bool Channel::hasOperator() const
+{
+	return (!_operators.empty());
+}
+
+void Channel::addHalfOperator(int fd)
+{
+	_halfOperators.insert(fd);
+}
+
+bool Channel::isHalfOperator(int fd) const
+{
+	return (_halfOperators.find(fd) != _halfOperators.end());
 }

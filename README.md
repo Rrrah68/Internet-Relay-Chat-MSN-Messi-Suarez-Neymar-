@@ -6,12 +6,12 @@
 
 This project consists of implementing a fully functional IRC server in C++98. The goal is to build a server that can accept multiple clients concurrently, handle IRC commands correctly, and manage channels, users, operators, and messaging over TCP.
 
-The server uses non-blocking sockets and `poll()` to monitor several connections at the same time without blocking the whole application. It supports authentication, nickname registration, user registration, channel creation, messaging, operator commands, channel modes, and custom features such as an IRC bot and file transfer support.
+The server uses non-blocking sockets and `poll()` to monitor several connections at the same time without blocking the whole application. It supports authentication, nickname registration, user registration, channel creation, messaging, operator commands, channel modes, and a built-in IRC bot.
 
 The project is organized around several core components:
 
 - `Server`: manages the listening socket, connected clients, channels, polling loop, and command dispatching.
-- `Client`: stores user state, buffers, registration data, and file transfer state.
+- `Client`: stores user state, buffers, and registration data.
 - `Channel`: stores channel members, operators, invitations, topics, keys, limits, and modes.
 - `Parser`: parses raw IRC messages into structured commands and parameters.
 
@@ -41,7 +41,6 @@ The project is organized around several core components:
 - Signal handling
 - Input and output buffering
 - Built-in IRC bot
-- Custom file transfer commands
 
 ## Instructions
 
@@ -292,4 +291,4 @@ The final implementation, validation, and integration were always reviewed and a
 
 ## Notes
 
-This project is a complete IRC server implementation written in C++98, with the required core features and a few additional features such as a built-in bot and custom file transfer commands. It is designed to handle multiple active clients concurrently while remaining robust in the face of typical IRC traffic and edge cases.
+This project is a complete IRC server implementation written in C++98, with the required core features and a built-in bot. It is designed to handle multiple active clients concurrently while remaining robust in the face of typical IRC traffic and edge cases.

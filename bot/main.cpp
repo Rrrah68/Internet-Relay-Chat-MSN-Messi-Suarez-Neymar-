@@ -29,10 +29,26 @@ static std::string getNick(const std::string &message)
 	return (message.substr(start, end - start));
 }
 
+static std::string getMessageTarget(const std::string &message)
+{
+	size_t start = message.find(" PRIVMSG ");
+	size_t end;
+
+	if (start == std::string::npos)
+		return ("");
+	start += 9;
+	end = message.find(' ', start);
+	if (end == std::string::npos)
+		return ("");
+	return (message.substr(start, end - start));
+}
+
 static void handleMessage(int fd, const std::string &message)
 {
 	std::string nick;
+	static std::string responseTarget = "#bot";
 	std::string response;
+	std::string target;
 	size_t pos;
 
 	if (message.find("PRIVMSG ") == std::string::npos
@@ -45,7 +61,8 @@ static void handleMessage(int fd, const std::string &message)
 		pos = message.find(" :Users: ");
 		if (pos != std::string::npos)
 		{
-			response = "PRIVMSG #bot :Utilisateurs connectes: "
+			response = "PRIVMSG " + responseTarget
+				+ " :Utilisateurs connectes: "
 				+ message.substr(pos + 9) + "\r\n";
 			sendCommand(fd, response);
 		}
@@ -56,7 +73,8 @@ static void handleMessage(int fd, const std::string &message)
 	    pos = message.find(" :Channels: ");
 	    if (pos != std::string::npos)
 	    {
-		    response = "PRIVMSG #bot :Channels actifs:"
+		    response = "PRIVMSG " + responseTarget
+		    	+ " :Channels actifs:"
 		    	+ message.substr(pos + 11) + "\r\n";
             std::cout << ">> " << response;
 		    sendCommand(fd, response);
@@ -66,23 +84,26 @@ static void handleMessage(int fd, const std::string &message)
 	nick = getNick(message);
 	if (nick.empty() || nick == "ircbot")
 		return ;
+	target = getMessageTarget(message);
+	if (!target.empty())
+		responseTarget = target;
+	if (target.empty())
+		target = responseTarget;
 
 	if (message.find(":!help") != std::string::npos)
 	{
-		response = "PRIVMSG " + nick
+		response = "PRIVMSG " + target
 			+ " :Commandes: !help !ping !hello !users !channels !send\r\n";
 		sendCommand(fd, response);
 	}
 	else if (message.find(":!ping") != std::string::npos)
 	{
-		response = "PRIVMSG " + nick
-			+ " :PONG !\r\n";
+		response = "PRIVMSG " + target + " :PONG !\r\n";
 		sendCommand(fd, response);
 	}
 	else if (message.find(":!hello") != std::string::npos)
 	{
-		response = "PRIVMSG " + nick
-			+ " :Bonjour " + nick + " !\r\n";
+		response = "PRIVMSG " + target + " :Bonjour " + nick + " !\r\n";
 		sendCommand(fd, response);
 	}
 	else if (message.find(":!users") != std::string::npos)
@@ -92,10 +113,6 @@ static void handleMessage(int fd, const std::string &message)
     else if (message.find(":!channels") != std::string::npos)
     {
 	    sendCommand(fd, "BOTCHANNELS\r\n");
-    }
-    else if (message.find(":!send ") != std::string::npos)
-    {
-	    std::cout << "Commande !send recue" << std::endl;
     }
 }
 

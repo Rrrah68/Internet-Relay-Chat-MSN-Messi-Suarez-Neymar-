@@ -34,14 +34,6 @@ class Client
 		void				setUsername(const std::string &username);
 
 		bool				isRegistered() const;
-		bool				isReceivingFile() const;
-		void				setReceivingFile(bool value);
-
-		size_t				getFileBytesRemaining() const;
-		void				setFileBytesRemaining(size_t value);
-
-		std::string			&getFileBuffer();
-		void				appendToFileBuffer(const std::string &data);	
 		
 	private:
 		int			_fd;
@@ -52,9 +44,6 @@ class Client
 		bool		_sentPass;
 		std::string	_nickname;
 		std::string	_username;
-		bool		_receivingFile;
-		size_t		_fileBytesRemaining;
-		std::string	_fileBuffer;
 };
 
 #endif

@@ -1,10 +1,10 @@
 #include "Client.hpp"
 
-Client::Client() : _fd(-1), _authenticated(false), _sentPass(false), _receivingFile(false), _fileBytesRemaining(0)
+Client::Client() : _fd(-1), _authenticated(false), _sentPass(false)
 {
 }
 
-Client::Client(int fd) : _fd(fd), _authenticated(false), _sentPass(false), _receivingFile(false), _fileBytesRemaining(0)
+Client::Client(int fd) : _fd(fd), _authenticated(false), _sentPass(false)
 {
 }
 
@@ -28,9 +28,6 @@ Client &Client::operator=(const Client &other)
 		_sentPass = other._sentPass;
 		_nickname = other._nickname;
 		_username = other._username;
-		_receivingFile = other._receivingFile;
-		_fileBytesRemaining = other._fileBytesRemaining;
-		_fileBuffer = other._fileBuffer;
 	}
 	return (*this);
 }
@@ -104,34 +101,4 @@ bool Client::isRegistered() const
 {
 	return (_authenticated && _sentPass
 		&& !_nickname.empty() && !_username.empty());
-}
-
-bool Client::isReceivingFile() const
-{
-	return (_receivingFile);
-}
-
-void Client::setReceivingFile(bool value)
-{
-	_receivingFile = value;
-}
-
-size_t Client::getFileBytesRemaining() const
-{
-	return (_fileBytesRemaining);
-}
-
-void Client::setFileBytesRemaining(size_t value)
-{
-	_fileBytesRemaining = value;
-}
-
-std::string &Client::getFileBuffer()
-{
-	return (_fileBuffer);
-}
-
-void Client::appendToFileBuffer(const std::string &data)
-{
-	_fileBuffer += data;
 }

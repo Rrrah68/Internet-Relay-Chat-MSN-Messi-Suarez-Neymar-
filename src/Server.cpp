@@ -213,43 +213,6 @@ void Server::handleClientRead(int fd)
 		return ;
 	}
 
-	if (it->second.isReceivingFile())
-	{
-		size_t received = static_cast<size_t>(n);
-		size_t remaining = it->second.getFileBytesRemaining();
-		std::vector<FileTransfer>::iterator transfer;
-
-		if (received > remaining)
-			received = remaining;
-
-		it->second.appendToFileBuffer(
-			std::string(buffer, received));
-		it->second.setFileBytesRemaining(
-			remaining - received);
-
-		transfer = _fileTransfers.begin();
-		while (transfer != _fileTransfers.end())
-		{
-			if (transfer->senderFd == fd)
-				break ;
-			++transfer;
-		}
-
-		if (transfer != _fileTransfers.end())
-		{
-			_clients[transfer->receiverFd].appendToOutBuffer(
-				it->second.getFileBuffer());
-			enableWrite(transfer->receiverFd);
-			it->second.getFileBuffer().clear();
-			transfer->bytesTransferred += received;
-		}
-
-		if (remaining - received == 0)
-			it->second.setReceivingFile(false);
-
-		return ;
-	}
-
 	it->second.appendToInBuffer(
 		std::string(buffer, static_cast<size_t>(n)));
 	extractCommands(fd);
@@ -367,7 +330,6 @@ void Server::queueDelayedReply(int fd, const std::string &message,
 
 void Server::extractCommands(int fd)
 {
-	std::map<int, Client>::iterator it;
 	std::string &buf = _clients[fd].getInBuffer();
 	size_t pos;
 
@@ -382,50 +344,6 @@ void Server::extractCommands(int fd)
 
 		if (!line.empty())
 			processCommand(fd, line);
-
-		it = _clients.find(fd);
-		if (it == _clients.end())
-			return ;
-
-		if (it->second.isReceivingFile())
-		{
-			if (!buf.empty())
-			{
-				size_t remaining;
-				size_t dataSize;
-				std::vector<FileTransfer>::iterator transfer;
-
-				remaining = it->second.getFileBytesRemaining();
-				dataSize = buf.size();
-
-				if (dataSize > remaining)
-					dataSize = remaining;
-
-				transfer = _fileTransfers.begin();
-				while (transfer != _fileTransfers.end())
-				{
-					if (transfer->senderFd == fd)
-						break ;
-					++transfer;
-				}
-
-				if (transfer != _fileTransfers.end())
-				{
-					_clients[transfer->receiverFd].appendToOutBuffer(
-						buf.substr(0, dataSize));
-					enableWrite(transfer->receiverFd);
-					transfer->bytesTransferred += dataSize;
-				}
-
-				buf.erase(0, dataSize);
-				it->second.setFileBytesRemaining(
-					remaining - dataSize);
-
-				if (remaining - dataSize == 0)
-					it->second.setReceivingFile(false);
-			}
-			return ;
-		}
 	}
 }
 
@@ -436,10 +354,21 @@ void Server::processCommand(int fd, const std::string &line)
 		return ;
 
 	IRCCommand command = _parser.parse(line);
+	std::cout << "[fd " << fd << "] command " << command.command;
+	if (command.command != "PASS" && command.command != "CAP")
+		std::cout << " from " << (it->second.getNickname().empty()
+			? "*" : it->second.getNickname());
+	std::cout << std::endl;
 
 	if (command.command == "PASS")
 	{
 		handlePass(fd, command);
+		return ;
+	}
+
+	if (command.command == "CAP")
+	{
+		handleCap(fd, command);
 		return ;
 	}
 
@@ -448,107 +377,100 @@ void Server::processCommand(int fd, const std::string &line)
 		handleNick(fd, command);
 		return ;
 	}
-
 	if (command.command == "USER")
 	{
 		handleUser(fd, command);
 		return ;
 	}
-
 	if (command.command == "JOIN")
 	{
 		handleJoin(fd, command);
 		return ;
 	}
-
 	if (command.command == "PART")
 	{
 		handlePart(fd, command);
 		return ;
 	}
-
 	if (command.command == "PRIVMSG")
 	{
 		handlePrivmsg(fd, command);
 		return ;
 	}
-
 	if (command.command == "NOTICE")
 	{
 		handlePrivmsg(fd, command, true);
 		return ;
 	}
-
 	if (command.command == "PING")
 	{
 		handlePing(fd, command);
 		return ;
 	}
-	
 	if (command.command == "QUIT")
 	{
 		handleQuit(fd, command);
 		return ;
 	}
-
 	if (command.command == "TOPIC")
 	{
 		handleTopic(fd, command);
 		return ;
 	}
-
 	if (command.command == "MODE")
 	{
 		handleMode(fd, command);
 		return ;
 	}
-
 	if (command.command == "INVITE")
 	{
 		handleInvite(fd, command);
 		return ;
 	}
-
 	if (command.command == "KICK")
 	{
 		handleKick(fd, command);
 		return ;
 	}
-	
 	if (command.command == "BOTUSERS")
 	{
 		handleBotUsers(fd, command);
 		return ;
 	}
-
 	if (command.command == "BOTCHANNELS")
 	{
 		handleBotChannels(fd, command);
 		return ;
 	}
-
-	if (command.command == "FTSEND")
+	if (command.command == "WHO")
 	{
-		handleFileSend(fd, command);
-		return ;
-	}
-
-	if (command.command == "FTDATA")
-	{
-		handleFileData(fd, command);
-		return ;
-	}
-
-	if (command.command == "FTEND")
-	{
-		handleFileEnd(fd, command);
+		handleWho(fd, command);
 		return ;
 	}
 	std::string reply = ":ircserv 421 * "
 		+ command.command + " :Unknown command\r\n";
-
 	it->second.appendToOutBuffer(reply);
 	enableWrite(fd);
+}
+
+void Server::handleCap(int fd, const IRCCommand &command)
+{
+	std::map<int, Client>::iterator it = _clients.find(fd);
+
+	if (it == _clients.end() || command.params.empty())
+		return ;
+
+	if (command.params[0] == "LS")
+	{
+		it->second.appendToOutBuffer(":ircserv CAP * LS :\r\n");
+		enableWrite(fd);
+	}
+	else if (command.params[0] == "REQ" && command.params.size() > 1)
+	{
+		it->second.appendToOutBuffer(":ircserv CAP * ACK :"
+			+ command.params[1] + "\r\n");
+		enableWrite(fd);
+	}
 }
 
 void Server::handleBotChannels(int fd, const IRCCommand &command)
@@ -567,7 +489,6 @@ void Server::handleBotChannels(int fd, const IRCCommand &command)
 			channels += ", ";
 		channels += channel->first;
 	}
-
 	it->second.appendToOutBuffer(
 		":ircserv 901 " + it->second.getNickname()
 		+ " :Channels: " + channels + "\r\n");
@@ -579,7 +500,7 @@ void Server::handlePass(int fd, const IRCCommand &command)
 	std::map<int, Client>::iterator it = _clients.find(fd);
 	if (it == _clients.end())
 		return ;
-
+	std::cout << "[fd " << fd << "] PASS received" << std::endl;
 	if (command.params.size() != 1)
 	{
 		it->second.appendToOutBuffer(
@@ -587,7 +508,6 @@ void Server::handlePass(int fd, const IRCCommand &command)
 		enableWrite(fd);
 		return ;
 	}
-
 	if (it->second.hasSentPass())
 	{
 		it->second.appendToOutBuffer(
@@ -595,18 +515,17 @@ void Server::handlePass(int fd, const IRCCommand &command)
 		enableWrite(fd);
 		return ;
 	}
-
 	if (command.params[0] == getPassword())
 	{
 		it->second.setAuthenticated(true);
 		it->second.setSentPass(true);
+		std::cout << "[fd " << fd << "] authenticated" << std::endl;
 	}
 	else
 	{
-		it->second.appendToOutBuffer(
-			":ircserv 464 * :Password incorrect\r\n");
+		std::cout << "[fd " << fd << "] authentication failed" << std::endl;
+		it->second.appendToOutBuffer(":ircserv 464 * :Password incorrect\r\n");
 	}
-
 	if (!it->second.getOutBuffer().empty())
 		enableWrite(fd);
 }
@@ -615,35 +534,21 @@ bool Server::isValidNickname(const std::string &nickname) const
 {
 	if (nickname.empty())
 		return false;
-
-	if (!std::isalpha(nickname[0])
-		&& nickname[0] != '['
-		&& nickname[0] != ']'
-		&& nickname[0] != '\\'
-		&& nickname[0] != '^'
-		&& nickname[0] != '_'
-		&& nickname[0] != '`'
-		&& nickname[0] != '{'
-		&& nickname[0] != '|'
-		&& nickname[0] != '}')
+	if (!std::isalpha(nickname[0]) && nickname[0] != '['
+		&& nickname[0] != ']' && nickname[0] != '\\'
+		&& nickname[0] != '^' && nickname[0] != '_'
+		&& nickname[0] != '`' && nickname[0] != '{'
+		&& nickname[0] != '|' && nickname[0] != '}')
 		return false;
-
 	for (size_t i = 1; i < nickname.size(); ++i)
 	{
-		if (!std::isalnum(nickname[i])
-			&& nickname[i] != '['
-			&& nickname[i] != ']'
-			&& nickname[i] != '\\'
-			&& nickname[i] != '^'
-			&& nickname[i] != '_'
-			&& nickname[i] != '`'
-			&& nickname[i] != '{'
-			&& nickname[i] != '|'
-			&& nickname[i] != '}'
-			&& nickname[i] != '-')
+		if (!std::isalnum(nickname[i]) && nickname[i] != '['
+			&& nickname[i] != ']' && nickname[i] != '\\'
+			&& nickname[i] != '^' && nickname[i] != '_'
+			&& nickname[i] != '`' && nickname[i] != '{'
+			&& nickname[i] != '|' && nickname[i] != '}')
 			return false;
 	}
-
 	return true;
 }
 
@@ -720,12 +625,6 @@ void Server::handleNick(int fd, const IRCCommand &command)
 			enableWrite(*recipient);
 		}
 	}
-	else if (it->second.isRegistered())
-	{
-		it->second.appendToOutBuffer(
-			":ircserv 001 " + nick + " :Welcome to the IRC network\r\n");
-		enableWrite(fd);
-	}
 }
 
 void Server::handleUser(int fd, const IRCCommand &command)
@@ -774,8 +673,15 @@ void Server::handleUser(int fd, const IRCCommand &command)
 	enableWrite(fd);
 
 	if (it->second.isRegistered())
+	{
 		std::cout << "[fd " << fd << "] CLIENT REGISTERED"
 			<< std::endl;
+
+		IRCCommand defaultJoin;
+		defaultJoin.command = "JOIN";
+		defaultJoin.params.push_back("#general");
+		handleJoin(fd, defaultJoin);
+	}
 
 }
 
@@ -796,6 +702,7 @@ void Server::handleKick(int fd, const IRCCommand &command)
 	std::map<int, Client>::iterator client = _clients.find(fd);
 	if (client == _clients.end())
 		return ;
+	std::cout << "[fd " << fd << "] KICK" << std::endl;
 
 	if (!client->second.isRegistered())
 	{
@@ -902,6 +809,7 @@ Channel &Server::getOrCreateChannel(const std::string &name)
 		return (it->second);
 
 	_channels.insert(std::make_pair(name, Channel(name)));
+	std::cout << "[server] channel created " << name << std::endl;
 	return (_channels.find(name)->second);
 }
 
@@ -940,6 +848,14 @@ void Server::handleJoin(int fd, const IRCCommand &command)
 			channelName = channels.substr(start);
 		else
 			channelName = channels.substr(start, pos - start);
+
+		if (channelName == "0")
+		{
+			if (pos == std::string::npos)
+				break ;
+			start = pos + 1;
+			continue ;
+		}
 
 		if (!channelName.empty() && channelName[0] == '#')
 		{
@@ -1004,24 +920,20 @@ void Server::handleJoin(int fd, const IRCCommand &command)
 							names += "@";
 						names += member->second.getNickname();
 					}
-
-					queueDelayedReply(fd,
+					it->second.appendToOutBuffer(
 						":ircserv 353 " + it->second.getNickname()
-						+ " = " + channelName + " :" + names + "\r\n", 25);
-					queueDelayedReply(fd,
+						+ " = " + channelName + " :" + names + "\r\n");
+
+					it->second.appendToOutBuffer(
 						":ircserv 366 " + it->second.getNickname()
 						+ " " + channelName
-						+ " :End of /NAMES list.\r\n", 50);
-					enableWrite(fd);
+						+ " :End of /NAMES list.\r\n");
+
+enableWrite(fd);
+					std::cout << "[fd " << fd << "] joined " << channelName
+						<< std::endl;
 				}
 			}
-		}
-		else if (!channelName.empty())
-		{
-			it->second.appendToOutBuffer(
-				":ircserv 403 " + channelName
-				+ " :No such channel\r\n");
-			enableWrite(fd);
 		}
 
 		if (pos == std::string::npos)
@@ -1035,6 +947,7 @@ void Server::handlePart(int fd, const IRCCommand &command)
 	std::map<int, Client>::iterator it = _clients.find(fd);
 	if (it == _clients.end())
 		return ;
+	std::cout << "[fd " << fd << "] PART" << std::endl;
 
 	if (!it->second.isRegistered())
 	{
@@ -1146,6 +1059,9 @@ void Server::handlePrivmsg(int fd, const IRCCommand &command, bool isNotice)
 	}
 
 	std::string target = command.params[0];
+	std::cout << "[fd " << fd << "] "
+		<< (isNotice ? "NOTICE" : "PRIVMSG") << " target=" << target
+		<< std::endl;
 	if (target[0] != '#')
 	{
 		for (std::map<int, Client>::iterator client = _clients.begin();
@@ -1185,7 +1101,8 @@ void Server::handlePrivmsg(int fd, const IRCCommand &command, bool isNotice)
 		return ;
 	}
 
-	if (!channelIt->second.hasClient(fd))
+	if (!channelIt->second.hasClient(fd)
+		&& it->second.getNickname() != "ircbot")
 	{
 		if (!isNotice)
 		{
@@ -1209,6 +1126,7 @@ void Server::handlePing(int fd, const IRCCommand &command)
 	std::map<int, Client>::iterator client = _clients.find(fd);
 	if (client == _clients.end())
 		return ;
+	std::cout << "[fd " << fd << "] PING" << std::endl;
 
 	if (command.params.empty())
 	{
@@ -1228,6 +1146,7 @@ void Server::handleQuit(int fd, const IRCCommand &command)
 	std::map<int, Client>::iterator it = _clients.find(fd);
 	if (it == _clients.end())
 		return ;
+	std::cout << "[fd " << fd << "] QUIT" << std::endl;
 
 	std::string reason = "Quit";
 	if (!command.params.empty())
@@ -1269,6 +1188,7 @@ void Server::handleTopic(int fd, const IRCCommand &command)
 	std::map<int, Client>::iterator client = _clients.find(fd);
 	if (client == _clients.end())
 		return ;
+	std::cout << "[fd " << fd << "] TOPIC" << std::endl;
 
 	if (!client->second.isRegistered())
 	{
@@ -1346,6 +1266,17 @@ void Server::handleMode(int fd, const IRCCommand &command)
 	std::map<int, Client>::iterator client = _clients.find(fd);
 	if (client == _clients.end())
 		return ;
+	std::cout << "[fd " << fd << "] MODE" << std::endl;
+	std::cout << "[fd " << fd << "] MODE params:";
+
+	size_t i = 0;
+	while (i < command.params.size())
+	{
+		std::cout << " [" << command.params[i] << "]";
+		i++;
+	}
+	std::cout << std::endl;
+
 
 	if (!client->second.isRegistered())
 	{
@@ -1355,13 +1286,41 @@ void Server::handleMode(int fd, const IRCCommand &command)
 		return ;
 	}
 
-	if (command.params.size() < 2)
+	if (command.params.size() >= 2
+		&& command.params[0] == client->second.getNickname())
 	{
 		client->second.appendToOutBuffer(
-			":ircserv 461 * MODE :Not enough parameters\r\n");
+			":ircserv 221 " + client->second.getNickname()
+			+ " +i\r\n");
 		enableWrite(fd);
 		return ;
 	}
+
+
+	if (command.params.size() == 1)
+	{
+		std::string channelName = command.params[0];
+		std::map<std::string, Channel>::iterator channel;
+
+		channel = _channels.find(channelName);
+		if (channel == _channels.end())
+		{
+			client->second.appendToOutBuffer(
+				":ircserv 403 " + channelName
+				+ " :No such channel\r\n");
+			enableWrite(fd);
+			return ;
+		}
+
+		client->second.appendToOutBuffer(
+			":ircserv 324 " + client->second.getNickname()
+			+ " " + channelName + " +\r\n");
+		enableWrite(fd);
+		return ;
+	}
+
+	if (command.params.size() < 2)
+		return ;
 
 	std::string channelName = command.params[0];
 	std::string mode = command.params[1];
@@ -1387,7 +1346,8 @@ void Server::handleMode(int fd, const IRCCommand &command)
 		return ;
 	}
 
-	if (!channel->second.isOperator(fd))
+	if (!channel->second.isOperator(fd)
+		&& !channel->second.isHalfOperator(fd))
 	{
 		client->second.appendToOutBuffer(
 			":ircserv 482 " + channelName
@@ -1396,14 +1356,47 @@ void Server::handleMode(int fd, const IRCCommand &command)
 		return ;
 	}
 
+	if ((mode == "+o" || mode == "-o")
+		&& !channel->second.isOperator(fd))
+	{
+		client->second.appendToOutBuffer(
+			":ircserv 482 " + channelName
+			+ " :You're not channel operator\r\n");
+		enableWrite(fd);
+		return ;
+	}
+
+	if (mode == "b")
+	{
+		client->second.appendToOutBuffer(
+			":ircserv 368 " + client->second.getNickname()
+			+ " " + channelName
+			+ " :End of channel ban list\r\n");
+		enableWrite(fd);
+		return ;
+	}
+	bool	validMode = false;
+
 	if (mode == "+t")
+	{
 		channel->second.setTopicRestricted(true);
+		validMode = true;
+	}
 	else if (mode == "-t")
+	{
 		channel->second.setTopicRestricted(false);
+		validMode = true;
+	}
 	else if (mode == "+i")
+	{
 		channel->second.setInviteOnly(true);
+		validMode = true;
+	}
 	else if (mode == "-i")
+	{
 		channel->second.setInviteOnly(false);
+		validMode = true;
+	}
 	else if (mode == "+k")
 	{
 		if (command.params.size() < 3)
@@ -1414,9 +1407,13 @@ void Server::handleMode(int fd, const IRCCommand &command)
 			return ;
 		}
 		channel->second.setKey(command.params[2]);
+		validMode = true;
 	}
 	else if (mode == "-k")
+	{
 		channel->second.removeKey();
+		validMode = true;
+	}
 	else if (mode == "+l")
 	{
 		if (command.params.size() < 3)
@@ -1436,9 +1433,13 @@ void Server::handleMode(int fd, const IRCCommand &command)
 			return ;
 		}
 		channel->second.setLimit(limit);
+		validMode = true;
 	}
 	else if (mode == "-l")
+	{
 		channel->second.removeLimit();
+		validMode = true;
+	}
 	else if (mode == "+o")
 	{
 		if (command.params.size() < 3)
@@ -1465,12 +1466,14 @@ void Server::handleMode(int fd, const IRCCommand &command)
 					return ;
 				}
 
+			if (channel->second.hasOperator())
+				channel->second.addHalfOperator(target->first);
+			else
 				channel->second.addOperator(target->first);
-
-				std::string message = ":"
-					+ client->second.getNickname()
-					+ "!user@localhost MODE " + channelName
-					+ " +o " + nickname + "\r\n";
+					std::string message = ":"
+						+ client->second.getNickname()
+						+ "!user@localhost MODE " + channelName
+						+ " +o " + nickname + "\r\n";
 				broadcastToChannel(channel->second, fd, message);
 				client->second.appendToOutBuffer(message);
 				enableWrite(fd);
@@ -1527,14 +1530,15 @@ void Server::handleMode(int fd, const IRCCommand &command)
 		enableWrite(fd);
 		return ;
 	}
-	else
+	
+	if (!validMode)
 	{
 		client->second.appendToOutBuffer(
-			":ircserv 472 " + mode + " :is unknown mode char to me\r\n");
+			":ircserv 472 " + mode
+			+ " :is unknown mode char to me\r\n");
 		enableWrite(fd);
 		return ;
 	}
-
 	std::string message = ":" + client->second.getNickname()
 		+ "!user@localhost MODE " + channelName
 		+ " " + mode;
@@ -1554,6 +1558,7 @@ void Server::handleInvite(int fd, const IRCCommand &command)
 	std::map<int, Client>::iterator client = _clients.find(fd);
 	if (client == _clients.end())
 		return ;
+	std::cout << "[fd " << fd << "] INVITE" << std::endl;
 
 	if (!client->second.isRegistered())
 	{
@@ -1654,172 +1659,6 @@ void Server::handleBotUsers(int fd, const IRCCommand &command)
 	enableWrite(fd);
 }
 
-void Server::handleFileSend(int fd, const IRCCommand &command)
-{
-	std::map<int, Client>::iterator sender;
-	std::map<int, Client>::iterator receiver;
-	FileTransfer transfer;
-
-	sender = _clients.find(fd);
-	if (sender == _clients.end())
-		return ;
-
-	if (command.params.size() < 3)
-	{
-		sender->second.appendToOutBuffer(
-			":ircserv 461 * FTSEND :Not enough parameters\r\n");
-		enableWrite(fd);
-		return ;
-	}
-
-	receiver = _clients.begin();
-	while (receiver != _clients.end())
-	{
-		if (receiver->second.getNickname() == command.params[0])
-			break ;
-		++receiver;
-	}
-
-	if (receiver == _clients.end())
-	{
-		sender->second.appendToOutBuffer(
-			":ircserv 401 " + command.params[0]
-			+ " :No such nick/channel\r\n");
-		enableWrite(fd);
-		return ;
-	}
-
-	transfer.senderFd = fd;
-	transfer.receiverFd = receiver->first;
-	transfer.filename = command.params[1];
-	transfer.fileSize = std::atoi(command.params[2].c_str());
-	transfer.bytesTransferred = 0;
-
-	for (std::vector<FileTransfer>::iterator active =
-		_fileTransfers.begin(); active != _fileTransfers.end();)
-	{
-		if (active->senderFd == fd)
-			active = _fileTransfers.erase(active);
-		else
-			++active;
-	}
-
-	_fileTransfers.push_back(transfer);
-
-	sender->second.setReceivingFile(true);
-	sender->second.setFileBytesRemaining(transfer.fileSize);
-	sender->second.getFileBuffer().clear();
-
-	receiver->second.appendToOutBuffer(
-		":" + sender->second.getNickname()
-		+ "!user@localhost FTSEND " + transfer.filename
-		+ " " + command.params[2] + "\r\n");
-	enableWrite(receiver->first);
-
-	sender->second.appendToOutBuffer(
-		":ircserv 902 " + sender->second.getNickname()
-		+ " :File transfer started\r\n");
-	enableWrite(fd);
-}
-
-void Server::handleFileData(int fd, const IRCCommand &command)
-{
-	std::map<int, Client>::iterator sender;
-	std::vector<FileTransfer>::iterator transfer;
-
-	sender = _clients.find(fd);
-	if (sender == _clients.end())
-		return ;
-
-	if (command.params.size() < 2)
-	{
-		sender->second.appendToOutBuffer(
-			":ircserv 461 * FTDATA :Not enough parameters\r\n");
-		enableWrite(fd);
-		return ;
-	}
-
-	transfer = _fileTransfers.begin();
-	while (transfer != _fileTransfers.end())
-	{
-		if (transfer->senderFd == fd
-			&& _clients[transfer->receiverFd].getNickname()
-			== command.params[0])
-			break ;
-		++transfer;
-	}
-
-	if (transfer == _fileTransfers.end())
-	{
-		sender->second.appendToOutBuffer(
-			":ircserv 409 * FTDATA :No active file transfer\r\n");
-		enableWrite(fd);
-		return ;
-	}
-
-	std::string data = command.params[1];
-
-	_clients[transfer->receiverFd].appendToOutBuffer(
-		":" + sender->second.getNickname()
-		+ "!user@localhost FTDATA :" + data + "\r\n");
-	enableWrite(transfer->receiverFd);
-
-	transfer->bytesTransferred += data.size();
-
-	sender->second.appendToOutBuffer(
-		":ircserv 903 " + sender->second.getNickname()
-		+ " :Data sent\r\n");
-	enableWrite(fd);
-}
-
-void Server::handleFileEnd(int fd, const IRCCommand &command)
-{
-	std::map<int, Client>::iterator sender;
-	std::vector<FileTransfer>::iterator transfer;
-
-	sender = _clients.find(fd);
-	if (sender == _clients.end())
-		return ;
-
-	if (command.params.empty())
-	{
-		sender->second.appendToOutBuffer(
-			":ircserv 461 * FTEND :Not enough parameters\r\n");
-		enableWrite(fd);
-		return ;
-	}
-
-	transfer = _fileTransfers.begin();
-	while (transfer != _fileTransfers.end())
-	{
-		if (transfer->senderFd == fd
-			&& _clients[transfer->receiverFd].getNickname()
-			== command.params[0])
-			break ;
-		++transfer;
-	}
-
-	if (transfer == _fileTransfers.end())
-	{
-		sender->second.appendToOutBuffer(
-			":ircserv 409 * FTEND :No active file transfer\r\n");
-		enableWrite(fd);
-		return ;
-	}
-
-	_clients[transfer->receiverFd].appendToOutBuffer(
-		":" + sender->second.getNickname()
-		+ "!user@localhost FTEND\r\n");
-	enableWrite(transfer->receiverFd);
-
-	sender->second.appendToOutBuffer(
-		":ircserv 904 " + sender->second.getNickname()
-		+ " :File transfer completed\r\n");
-	enableWrite(fd);
-
-	_fileTransfers.erase(transfer);
-}
-
 void Server::broadcastToChannel(const Channel &channel, int senderFd,
 	const std::string &message)
 {
@@ -1837,6 +1676,65 @@ void Server::broadcastToChannel(const Channel &channel, int senderFd,
 		it->second.appendToOutBuffer(message);
 		enableWrite(clients[i]);
 	}
+
+	for (std::map<int, Client>::iterator client = _clients.begin();
+		client != _clients.end(); ++client)
+	{
+		if (client->first != senderFd
+			&& client->second.getNickname() == "ircbot"
+			&& !channel.hasClient(client->first))
+		{
+			client->second.appendToOutBuffer(message);
+			enableWrite(client->first);
+		}
+	}
+}
+
+void Server::handleWho(int fd, const IRCCommand &command)
+{
+	std::map<int, Client>::iterator client = _clients.find(fd);
+
+	if (client == _clients.end())
+		return ;
+
+	if (!client->second.isRegistered())
+	{
+		client->second.appendToOutBuffer(
+			":ircserv 451 * :You have not registered\r\n");
+		enableWrite(fd);
+		return ;
+	}
+
+	if (command.params.empty())
+	{
+		client->second.appendToOutBuffer(
+			":ircserv 315 " + client->second.getNickname()
+			+ " * :End of /WHO list.\r\n");
+		enableWrite(fd);
+		return ;
+	}
+
+	std::string channelName = command.params[0];
+	std::map<std::string, Channel>::iterator channel;
+
+	channel = _channels.find(channelName);
+	if (channel == _channels.end())
+	{
+		client->second.appendToOutBuffer(
+			":ircserv 315 " + client->second.getNickname()
+			+ " " + channelName
+			+ " :End of /WHO list.\r\n");
+		enableWrite(fd);
+		return ;
+	}
+
+	// On ajoutera ici les utilisateurs du channel.
+
+	client->second.appendToOutBuffer(
+		":ircserv 315 " + client->second.getNickname()
+		+ " " + channelName
+		+ " :End of /WHO list.\r\n");
+	enableWrite(fd);
 }
 
 void Server::disconnectClient(size_t pollIndex)
@@ -1859,15 +1757,6 @@ void Server::disconnectClient(size_t pollIndex)
 			_channels.erase(channel++);
 		else
 			++channel;
-	}
-
-	for (std::vector<FileTransfer>::iterator transfer =
-		_fileTransfers.begin(); transfer != _fileTransfers.end();)
-	{
-		if (transfer->senderFd == fd || transfer->receiverFd == fd)
-			transfer = _fileTransfers.erase(transfer);
-		else
-			++transfer;
 	}
 
 	close(fd);
