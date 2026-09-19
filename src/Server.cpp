@@ -5,7 +5,6 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <sys/time.h>
 #include <cstring>
 #include <cstdlib>
 #include <csignal>
@@ -98,8 +97,7 @@ void Server::run()
 {
 	while (!_shutdown)
 	{
-		dispatchDelayedReplies();
-		int ret = poll(&_pollFds[0], _pollFds.size(), getPollTimeout());
+		int ret = poll(&_pollFds[0], _pollFds.size(), -1);
 		if (ret < 0)
 		{
 			if (_shutdown)
@@ -263,69 +261,6 @@ void Server::flushClientWrite(int fd)
 			}
 		}
 	}
-}
-
-long long Server::getCurrentTimeMs() const
-{
-	struct timeval now;
-
-	gettimeofday(&now, NULL);
-	return static_cast<long long>(now.tv_sec) * 1000
-		+ static_cast<long long>(now.tv_usec) / 1000;
-}
-
-int Server::getPollTimeout() const
-{
-	if (_delayedReplies.empty())
-		return -1;
-
-	long long now = getCurrentTimeMs();
-	long long earliest = _delayedReplies[0].dueAtMs;
-	for (size_t i = 1; i < _delayedReplies.size(); ++i)
-	{
-		if (_delayedReplies[i].dueAtMs < earliest)
-			earliest = _delayedReplies[i].dueAtMs;
-	}
-	if (earliest <= now)
-		return 0;
-	if (earliest - now > 60000)
-		return 60000;
-	return static_cast<int>(earliest - now);
-}
-
-void Server::dispatchDelayedReplies()
-{
-	long long now = getCurrentTimeMs();
-	size_t i = 0;
-
-	while (i < _delayedReplies.size())
-	{
-		if (_delayedReplies[i].dueAtMs > now)
-		{
-			++i;
-			continue ;
-		}
-
-		std::map<int, Client>::iterator client =
-			_clients.find(_delayedReplies[i].clientFd);
-		if (client != _clients.end())
-		{
-			client->second.appendToOutBuffer(_delayedReplies[i].message);
-			enableWrite(client->first);
-		}
-		_delayedReplies.erase(_delayedReplies.begin() + i);
-	}
-}
-
-void Server::queueDelayedReply(int fd, const std::string &message,
-	long long delayMs)
-{
-	DelayedReply reply;
-
-	reply.clientFd = fd;
-	reply.dueAtMs = getCurrentTimeMs() + delayMs;
-	reply.message = message;
-	_delayedReplies.push_back(reply);
 }
 
 void Server::extractCommands(int fd)
@@ -1530,7 +1465,7 @@ void Server::handleMode(int fd, const IRCCommand &command)
 		enableWrite(fd);
 		return ;
 	}
-	
+
 	if (!validMode)
 	{
 		client->second.appendToOutBuffer(

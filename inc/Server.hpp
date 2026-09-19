@@ -9,13 +9,6 @@
 # include "Parser.hpp"
 # include "Channel.hpp"
 
-struct DelayedReply
-{
-	int			clientFd;
-	long long		dueAtMs;
-	std::string		message;
-};
-
 class Server
 {
 	public:
@@ -37,7 +30,7 @@ class Server
 		std::vector<struct pollfd>		_pollFds;
 		std::map<int, Client>			_clients;
 		std::map<std::string, Channel>	_channels;
-		std::vector<DelayedReply>		_delayedReplies;
+
 
 		Parser 							_parser;
 
@@ -55,11 +48,6 @@ class Server
 		void	disconnectClient(size_t pollIndex);
 
 		void	extractCommands(int fd);
-		long long	getCurrentTimeMs() const;
-		int		getPollTimeout() const;
-		void	dispatchDelayedReplies();
-		void	queueDelayedReply(int fd, const std::string &message,
-			long long delayMs);
 		void	processCommand(int fd, const std::string &line);
 		void	handlePass(int fd, const IRCCommand &command);
 		void	handleCap(int fd, const IRCCommand &command);
