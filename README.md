@@ -41,6 +41,7 @@ The project is organized around several core components:
 - Signal handling
 - Input and output buffering
 - Built-in IRC bot
+- DCC file transfers through IRC clients such as Irssi
 
 ## Instructions
 
@@ -104,6 +105,45 @@ Example:
 ./ircserv 6667 mypass
 ```
 
+### Connecting with Irssi
+
+Start Irssi, then connect with:
+
+```text
+/connect 127.0.0.1 6667 mypass Alice
+```
+
+Irssi sends the IRC registration commands (`PASS`, `NICK`, and `USER`)
+automatically. The server also joins a registered client to `#general` by
+default when that channel is not invite-only.
+
+Essential Irssi commands:
+
+```text
+/join #general                    Join a channel
+/part #general                    Leave a channel
+/msg #general Hello everyone      Send a channel message
+/msg Alice Hello                  Send a private message
+/query Alice                      Open a private conversation
+/nick NewNick                     Change nickname
+/topic #general Welcome           Change the channel topic
+/mode #general +i                 Enable invite-only mode
+/mode #general -i                 Disable invite-only mode
+/invite Alice #general            Invite a client
+/kick #general Alice              Remove a client
+/names #general                   List channel members
+/who #general                     List channel users
+/dcc send Alice file.txt          Send a file directly to Alice
+/dcc get Alice                    Accept a DCC file transfer
+/quit                             Disconnect from the server
+```
+
+If a `JOIN` is refused while a channel is invite-only, Irssi can still open a
+local channel window. This does not mean the join succeeded: the client must
+appear in the channel member list. After the operator disables `+i`, the
+server admits pending join attempts automatically. If the Irssi window is
+stale, use `/part #general` and then `/join #general`.
+
 ### Running the bot
 
 ```bash
@@ -125,6 +165,33 @@ The bot authenticates to the server, joins the `#bot` channel, and can respond t
 !users
 !channels
 ```
+
+The bot must be started after the server:
+
+```bash
+./ircserv 6667 mypass
+./ircbot 127.0.0.1 6667 mypass
+```
+
+### File transfer with Irssi
+
+DCC file transfers are negotiated through IRC messages and then transferred
+directly between the two IRC clients. The server forwards the DCC negotiation;
+it does not carry the file data itself.
+
+On the sender's Irssi client:
+
+```text
+/dcc send <nickname> <path/to/file>
+```
+
+On the receiving Irssi client, accept the transfer with:
+
+```text
+/dcc get <nickname>
+```
+
+The clients must be able to establish a direct TCP connection to each other.
 
 ## Usage examples
 

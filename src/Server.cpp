@@ -9,14 +9,13 @@
 #include <cstdlib>
 #include <csignal>
 #include <iostream>
-#include <sstream>
 #include <stdexcept>
 #include <cctype>
-#include <set>
 
 
 volatile bool	Server::_shutdown = false;
 
+// Lifecycle and socket setup.
 Server::Server(int port, const std::string &password)
 	: _port(port), _password(password), _listenFd(-1)
 {
@@ -263,6 +262,7 @@ void Server::flushClientWrite(int fd)
 	}
 }
 
+// Command parsing and dispatch.
 void Server::extractCommands(int fd)
 {
 	std::string &buf = _clients[fd].getInBuffer();
@@ -518,6 +518,9 @@ void Server::handleNick(int fd, const IRCCommand &command)
 		if (client->first != fd
 			&& client->second.getNickname() == nick)
 		{
+					it->second.setRejectedNickname(nick);
+					it->second.appendToOutBuffer(
+							":ircserv NOTICE * :Nickname already in use\r\n");
 			it->second.appendToOutBuffer(
 				":ircserv 433 * " + nick
 				+ " :Nickname is already in use\r\n");
@@ -531,6 +534,7 @@ void Server::handleNick(int fd, const IRCCommand &command)
 		return ;
 
 	it->second.setNickname(nick);
+		it->second.setRejectedNickname("");
 
 	if (!oldNick.empty())
 	{
@@ -596,6 +600,15 @@ void Server::handleUser(int fd, const IRCCommand &command)
 	it->second.setUsername(command.params[0]);
 	if (it->second.getNickname().empty())
 	{
+			if (!it->second.getRejectedNickname().empty())
+			{
+				it->second.appendToOutBuffer(
+						":ircserv 433 * "
+						+ it->second.getRejectedNickname()
+						+ " :Nickname is already in use\r\n");
+				enableWrite(fd);
+				return ;
+			}
 		it->second.appendToOutBuffer(
 			":ircserv 431 * :No nickname given\r\n");
 		enableWrite(fd);
@@ -612,14 +625,20 @@ void Server::handleUser(int fd, const IRCCommand &command)
 		std::cout << "[fd " << fd << "] CLIENT REGISTERED"
 			<< std::endl;
 
-		IRCCommand defaultJoin;
-		defaultJoin.command = "JOIN";
-		defaultJoin.params.push_back("#general");
-		handleJoin(fd, defaultJoin);
+			std::map<std::string, Channel>::iterator general =
+					_channels.find("#general");
+			if (general == _channels.end() || !general->second.getInviteOnly())
+			{
+					IRCCommand defaultJoin;
+					defaultJoin.command = "JOIN";
+					defaultJoin.params.push_back("#general");
+					handleJoin(fd, defaultJoin);
+			}
 	}
 
 }
 
+// Channel membership and channel modes.
 void Server::enableWrite(int fd)
 {
 	for (size_t i = 0; i < _pollFds.size(); ++i)
@@ -800,6 +819,7 @@ void Server::handleJoin(int fd, const IRCCommand &command)
 			{
 				if (channel.getInviteOnly() && !channel.isInvited(fd))
 				{
+					_pendingJoins[channelName].insert(fd);
 					it->second.appendToOutBuffer(
 						":ircserv 473 " + channelName
 						+ " :Cannot join channel (+i)\r\n");
@@ -829,8 +849,10 @@ void Server::handleJoin(int fd, const IRCCommand &command)
 
 					channel.addClient(fd);
 					channel.removeInvite(fd);
+					_pendingJoins[channelName].erase(fd);
 
-					if (wasEmpty)
+									if (it->second.getNickname() != "ircbot"
+										&& (wasEmpty || !channel.hasOperator()))
 						channel.addOperator(fd);
 
 					std::string message = ":"
@@ -1324,6 +1346,24 @@ void Server::handleMode(int fd, const IRCCommand &command)
 	{
 		channel->second.setInviteOnly(false);
 		validMode = true;
+
+			std::map<std::string, std::set<int> >::iterator pending =
+					_pendingJoins.find(channelName);
+			if (pending != _pendingJoins.end())
+			{
+				std::set<int> waiting = pending->second;
+				_pendingJoins.erase(pending);
+				for (std::set<int>::iterator waitingClient = waiting.begin();
+					waitingClient != waiting.end(); ++waitingClient)
+				{
+					if (_clients.find(*waitingClient) == _clients.end())
+						continue ;
+					IRCCommand joinCommand;
+					joinCommand.command = "JOIN";
+					joinCommand.params.push_back(channelName);
+					handleJoin(*waitingClient, joinCommand);
+				}
+			}
 	}
 	else if (mode == "+k")
 	{
@@ -1563,6 +1603,7 @@ void Server::handleInvite(int fd, const IRCCommand &command)
 	enableWrite(fd);
 }
 
+// Messages, bot commands, and server queries.
 void Server::handleBotUsers(int fd, const IRCCommand &command)
 {
 	std::map<int, Client>::iterator it = _clients.find(fd);
@@ -1669,6 +1710,7 @@ void Server::disconnectClient(size_t pollIndex)
 {
 	int fd = _pollFds[pollIndex].fd;
 	std::map<std::string, Channel>::iterator channel;
+	std::map<std::string, std::set<int> >::iterator pending;
 
 	std::cout << "Client disconnected: fd " << fd << std::endl;
 
@@ -1689,6 +1731,16 @@ void Server::disconnectClient(size_t pollIndex)
 
 	close(fd);
 	_clients.erase(fd);
+
+	pending = _pendingJoins.begin();
+	while (pending != _pendingJoins.end())
+	{
+		pending->second.erase(fd);
+		if (pending->second.empty())
+			_pendingJoins.erase(pending++);
+		else
+			++pending;
+	}
 
 	_pollFds[pollIndex] = _pollFds.back();
 	_pollFds.pop_back();

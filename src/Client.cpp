@@ -27,6 +27,7 @@ Client &Client::operator=(const Client &other)
 		_authenticated = other._authenticated;
 		_sentPass = other._sentPass;
 		_nickname = other._nickname;
+		_rejectedNickname = other._rejectedNickname;
 		_username = other._username;
 	}
 	return (*this);
@@ -85,6 +86,16 @@ const std::string &Client::getNickname() const
 void Client::setNickname(const std::string &nick)
 {
 	_nickname = nick;
+}
+
+const std::string &Client::getRejectedNickname() const
+{
+	return (_rejectedNickname);
+}
+
+void Client::setRejectedNickname(const std::string &nick)
+{
+	_rejectedNickname = nick;
 }
 
 const std::string &Client::getUsername() const

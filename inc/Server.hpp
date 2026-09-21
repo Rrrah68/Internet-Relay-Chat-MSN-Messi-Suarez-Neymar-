@@ -4,6 +4,7 @@
 # include <string>
 # include <vector>
 # include <map>
+# include <set>
 # include <poll.h>
 # include "Client.hpp"
 # include "Parser.hpp"
@@ -30,7 +31,7 @@ class Server
 		std::vector<struct pollfd>		_pollFds;
 		std::map<int, Client>			_clients;
 		std::map<std::string, Channel>	_channels;
-
+		std::map<std::string, std::set<int> >	_pendingJoins;
 
 		Parser 							_parser;
 
@@ -38,6 +39,7 @@ class Server
 		
 		static volatile bool			_shutdown;
 
+		/* Socket lifecycle and event loop. */
 		void	setupSocket();
 		bool	setNonBlocking(int fd);
 
@@ -47,6 +49,7 @@ class Server
 		void	flushClientWrite(int fd);
 		void	disconnectClient(size_t pollIndex);
 
+		/* Input parsing and client registration. */
 		void	extractCommands(int fd);
 		void	processCommand(int fd, const std::string &line);
 		void	handlePass(int fd, const IRCCommand &command);
@@ -55,14 +58,17 @@ class Server
 		void	handleUser(int fd, const IRCCommand &command);
 		void	enableWrite(int fd);
 		
+		/* Channel membership and channel modes. */
 		void	handleJoin(int fd, const IRCCommand &command);
 		void	handlePart(int fd, const IRCCommand &command);
+		/* Messages and server queries. */
 		void	handlePrivmsg(int fd, const IRCCommand &command,
 			bool isNotice = false);
 		void	handlePing(int fd, const IRCCommand &command);
 		void	handleQuit(int fd, const IRCCommand &command);
 		void	handleTopic(int fd, const IRCCommand &command);
 		void	handleInvite(int fd, const IRCCommand &command);
+		/* Bot commands and shared output helpers. */
 		void	handleBotUsers(int fd, const IRCCommand &command);
 		void	handleKick(int fd, const IRCCommand &command);
 		void	handleBotChannels(int fd, const IRCCommand &command);

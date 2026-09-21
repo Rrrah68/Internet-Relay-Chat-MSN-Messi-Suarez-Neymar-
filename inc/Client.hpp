@@ -29,6 +29,8 @@ class Client
 
 		const std::string	&getNickname() const;
 		void				setNickname(const std::string &nick);
+		const std::string	&getRejectedNickname() const;
+		void				setRejectedNickname(const std::string &nick);
 
 		const std::string	&getUsername() const;
 		void				setUsername(const std::string &username);
@@ -43,6 +45,7 @@ class Client
 		bool		_authenticated;
 		bool		_sentPass;
 		std::string	_nickname;
+		std::string	_rejectedNickname;
 		std::string	_username;
 };
 
