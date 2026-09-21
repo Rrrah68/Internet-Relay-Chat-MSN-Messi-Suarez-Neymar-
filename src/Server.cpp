@@ -1223,14 +1223,7 @@ void Server::handleMode(int fd, const IRCCommand &command)
 
 	if (command.params.size() >= 2
 		&& command.params[0] == client->second.getNickname())
-	{
-		client->second.appendToOutBuffer(
-			":ircserv 221 " + client->second.getNickname()
-			+ " +i\r\n");
-		enableWrite(fd);
 		return ;
-	}
-
 
 	if (command.params.size() == 1)
 	{
