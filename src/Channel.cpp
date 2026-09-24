@@ -31,6 +31,8 @@ void Channel::removeClient(int fd)
 		_clients.end(), fd);
 	if (it != _clients.end())
 		_clients.erase(it);
+	removeOperator(fd);
+	removeHalfOperator(fd);
 }
 
 bool Channel::hasClient(int fd) const
@@ -180,10 +182,26 @@ bool Channel::hasOperator() const
 
 void Channel::addHalfOperator(int fd)
 {
-	_halfOperators.insert(fd);
+	if (!isHalfOperator(fd))
+		_halfOperators.push_back(fd);
+}
+
+void Channel::removeHalfOperator(int fd)
+{
+	std::vector<int>::iterator it = std::find(_halfOperators.begin(),
+		_halfOperators.end(), fd);
+	if (it != _halfOperators.end())
+		_halfOperators.erase(it);
 }
 
 bool Channel::isHalfOperator(int fd) const
 {
-	return (_halfOperators.find(fd) != _halfOperators.end());
+	return (std::find(_halfOperators.begin(), _halfOperators.end(), fd)
+		!= _halfOperators.end());
+}
+
+// Ordered by promotion time: the first one is the oldest halfop.
+const std::vector<int> &Channel::getHalfOperators() const
+{
+	return (_halfOperators);
 }

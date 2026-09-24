@@ -1,10 +1,12 @@
 #include "Client.hpp"
 
-Client::Client() : _fd(-1), _authenticated(false), _sentPass(false)
+Client::Client() : _fd(-1), _authenticated(false), _sentPass(false),
+	_registered(false)
 {
 }
 
-Client::Client(int fd) : _fd(fd), _authenticated(false), _sentPass(false)
+Client::Client(int fd) : _fd(fd), _authenticated(false), _sentPass(false),
+	_registered(false)
 {
 }
 
@@ -27,8 +29,9 @@ Client &Client::operator=(const Client &other)
 		_authenticated = other._authenticated;
 		_sentPass = other._sentPass;
 		_nickname = other._nickname;
-		_rejectedNickname = other._rejectedNickname;
+		_rejectedNicknames = other._rejectedNicknames;
 		_username = other._username;
+		_registered = other._registered;
 	}
 	return (*this);
 }
@@ -88,14 +91,14 @@ void Client::setNickname(const std::string &nick)
 	_nickname = nick;
 }
 
-const std::string &Client::getRejectedNickname() const
+const std::set<std::string> &Client::getRejectedNicknames() const
 {
-	return (_rejectedNickname);
+	return (_rejectedNicknames);
 }
 
-void Client::setRejectedNickname(const std::string &nick)
+void Client::addRejectedNickname(const std::string &nick)
 {
-	_rejectedNickname = nick;
+	_rejectedNicknames.insert(nick);
 }
 
 const std::string &Client::getUsername() const
@@ -108,8 +111,18 @@ void Client::setUsername(const std::string &username)
 	_username = username;
 }
 
+bool Client::canRegister() const
+{
+	return (!_registered && _authenticated && _sentPass
+		&& !_nickname.empty() && !_username.empty());
+}
+
 bool Client::isRegistered() const
 {
-	return (_authenticated && _sentPass
-		&& !_nickname.empty() && !_username.empty());
+	return (_registered);
+}
+
+void Client::setRegistered(bool value)
+{
+	_registered = value;
 }

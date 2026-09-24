@@ -12,12 +12,22 @@ BOT_DIR		= bot
 
 SRCS		= $(SRC_DIR)/main.cpp \
 			  $(SRC_DIR)/Server.cpp \
+			  $(SRC_DIR)/Registration.cpp \
+			  $(SRC_DIR)/ChannelCommands.cpp \
+			  $(SRC_DIR)/Mode.cpp \
+			  $(SRC_DIR)/Messages.cpp \
+			  $(SRC_DIR)/Queries.cpp \
 			  $(SRC_DIR)/Client.cpp \
 			  $(SRC_DIR)/Parser.cpp \
 			  $(SRC_DIR)/Channel.cpp
 
 OBJS		= $(OBJ_DIR)/main.o \
 			  $(OBJ_DIR)/Server.o \
+			  $(OBJ_DIR)/Registration.o \
+			  $(OBJ_DIR)/ChannelCommands.o \
+			  $(OBJ_DIR)/Mode.o \
+			  $(OBJ_DIR)/Messages.o \
+			  $(OBJ_DIR)/Queries.o \
 			  $(OBJ_DIR)/Client.o \
 			  $(OBJ_DIR)/Parser.o \
 			  $(OBJ_DIR)/Channel.o

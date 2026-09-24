@@ -2,6 +2,7 @@
 # define CLIENT_HPP
 
 # include <string>
+# include <set>
 # include <cstddef>
 
 class Client
@@ -29,14 +30,16 @@ class Client
 
 		const std::string	&getNickname() const;
 		void				setNickname(const std::string &nick);
-		const std::string	&getRejectedNickname() const;
-		void				setRejectedNickname(const std::string &nick);
+		const std::set<std::string>	&getRejectedNicknames() const;
+		void				addRejectedNickname(const std::string &nick);
 
 		const std::string	&getUsername() const;
 		void				setUsername(const std::string &username);
 
+		bool				canRegister() const;
 		bool				isRegistered() const;
-		
+		void				setRegistered(bool value);
+
 	private:
 		int			_fd;
 		std::string	_inBuffer;
@@ -45,8 +48,9 @@ class Client
 		bool		_authenticated;
 		bool		_sentPass;
 		std::string	_nickname;
-		std::string	_rejectedNickname;
+		std::set<std::string>	_rejectedNicknames;
 		std::string	_username;
+		bool		_registered;
 };
 
 #endif

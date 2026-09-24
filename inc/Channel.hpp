@@ -25,6 +25,8 @@ class Channel
 		void					setKey(const std::string &key);
 		void					removeKey();
 		void					addHalfOperator(int fd);
+		void					removeHalfOperator(int fd);
+		const std::vector<int>	&getHalfOperators() const;
 
 
 		bool					isOperator(int fd) const;
@@ -52,7 +54,7 @@ class Channel
 		std::string			_topic;
 		bool				_topicRestricted;
 		std::vector<int>	_operators;
-		std::set<int> 		_halfOperators;
+		std::vector<int>	_halfOperators;
 		bool				_inviteOnly;
 		std::vector<int>	_invited;
 		bool				_keyEnabled;
